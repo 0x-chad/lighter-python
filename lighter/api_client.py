@@ -98,7 +98,12 @@ class ApiClient:
         await self.close()
 
     async def close(self):
-        await self.rest_client.close()
+        pool_manager = getattr(self.rest_client, "pool_manager", None)
+        if pool_manager and not pool_manager.closed:
+            await pool_manager.close()
+        retry_client = getattr(self.rest_client, "retry_client", None)
+        if retry_client is not None:
+            await retry_client.close()
 
     @property
     def user_agent(self):

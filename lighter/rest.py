@@ -76,29 +76,17 @@ class RESTClientObject:
         self.proxy = configuration.proxy
         self.proxy_headers = configuration.proxy_headers
 
-        # https pool manager
-        self.pool_manager = aiohttp.ClientSession(
-            connector=connector,
-            trust_env=True
-        )
+        # Store connector for lazy session creation
+        self.connector = connector
+        self.configuration = configuration
 
-        retries = configuration.retries
-        self.retry_client: Optional[aiohttp_retry.RetryClient]
-        if retries is not None:
-            self.retry_client = aiohttp_retry.RetryClient(
-                client_session=self.pool_manager,
-                retry_options=aiohttp_retry.ExponentialRetry(
-                    attempts=retries,
-                    factor=0.0,
-                    start_timeout=0.0,
-                    max_timeout=120.0
-                )
-            )
-        else:
-            self.retry_client = None
+        # https pool manager - will be created lazily in async context
+        self.pool_manager = None
+        self.retry_client: Optional[aiohttp_retry.RetryClient] = None
 
     async def close(self):
-        await self.pool_manager.close()
+        if self.pool_manager is not None and not self.pool_manager.closed:
+            await self.pool_manager.close()
         if self.retry_client is not None:
             await self.retry_client.close()
 
@@ -125,6 +113,27 @@ class RESTClientObject:
                                  timeout. It can also be a pair (tuple) of
                                  (connection, read) timeouts.
         """
+        # Lazy initialization of pool_manager in async context
+        if self.pool_manager is None or self.pool_manager.closed:
+            self.pool_manager = aiohttp.ClientSession(
+                connector=self.connector,
+                trust_env=True
+            )
+
+            retries = self.configuration.retries
+            if retries is not None:
+                self.retry_client = aiohttp_retry.RetryClient(
+                    client_session=self.pool_manager,
+                    retry_options=aiohttp_retry.ExponentialRetry(
+                        attempts=retries,
+                        factor=0.0,
+                        start_timeout=0.0,
+                        max_timeout=120.0
+                    )
+                )
+            else:
+                self.retry_client = None
+
         method = method.upper()
         assert method in [
             'GET',
