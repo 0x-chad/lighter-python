@@ -56,29 +56,11 @@ class RESTClientObject:
         # maxsize is number of requests to host that are allowed in parallel
         maxsize = configuration.connection_pool_maxsize
 
-        ssl_context = ssl.create_default_context(
-            cafile=configuration.ssl_ca_cert
-        )
-        if configuration.cert_file:
-            ssl_context.load_cert_chain(
-                configuration.cert_file, keyfile=configuration.key_file
-            )
-
-        if not configuration.verify_ssl:
-            ssl_context.check_hostname = False
-            ssl_context.verify_mode = ssl.CERT_NONE
-
-        connector = aiohttp.TCPConnector(
-            limit=maxsize,
-            ssl=ssl_context
-        )
-
+        # Store configuration for lazy session creation
+        self.configuration = configuration
+        self.maxsize = maxsize
         self.proxy = configuration.proxy
         self.proxy_headers = configuration.proxy_headers
-
-        # Store connector for lazy session creation
-        self.connector = connector
-        self.configuration = configuration
 
         # https pool manager - will be created lazily in async context
         self.pool_manager = None
@@ -115,8 +97,26 @@ class RESTClientObject:
         """
         # Lazy initialization of pool_manager in async context
         if self.pool_manager is None or self.pool_manager.closed:
+            # Create SSL context and connector in async context
+            ssl_context = ssl.create_default_context(
+                cafile=self.configuration.ssl_ca_cert
+            )
+            if self.configuration.cert_file:
+                ssl_context.load_cert_chain(
+                    self.configuration.cert_file, keyfile=self.configuration.key_file
+                )
+
+            if not self.configuration.verify_ssl:
+                ssl_context.check_hostname = False
+                ssl_context.verify_mode = ssl.CERT_NONE
+
+            connector = aiohttp.TCPConnector(
+                limit=self.maxsize,
+                ssl=ssl_context
+            )
+
             self.pool_manager = aiohttp.ClientSession(
-                connector=self.connector,
+                connector=connector,
                 trust_env=True
             )
 
@@ -153,8 +153,10 @@ class RESTClientObject:
         post_params = post_params or {}
         headers = headers or {}
         # url already contains the URL query string
-        timeout_value = _request_timeout or 5 * 60
-        timeout = aiohttp.ClientTimeout(total=timeout_value)
+        if _request_timeout:
+            timeout = aiohttp.ClientTimeout(total=_request_timeout)
+        else:
+            timeout = aiohttp.ClientTimeout(total=5 * 60)
 
         if 'Content-Type' not in headers:
             headers['Content-Type'] = 'application/json'
