@@ -1,9 +1,10 @@
 import json
 import warnings
-from websockets.sync.client import connect
 
-# Suppress deprecation warnings for legacy websockets API
-warnings.filterwarnings("ignore", category=DeprecationWarning, module="websockets")
+# Suppress all deprecation warnings from websockets library
+warnings.filterwarnings("ignore", category=DeprecationWarning, message=".*websockets.*")
+
+from websockets.sync.client import connect
 
 try:
     from websockets.asyncio.client import connect as connect_async
