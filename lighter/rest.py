@@ -153,7 +153,8 @@ class RESTClientObject:
         post_params = post_params or {}
         headers = headers or {}
         # url already contains the URL query string
-        timeout = _request_timeout or 5 * 60
+        timeout_value = _request_timeout or 5 * 60
+        timeout = aiohttp.ClientTimeout(total=timeout_value)
 
         if 'Content-Type' not in headers:
             headers['Content-Type'] = 'application/json'
