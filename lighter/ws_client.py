@@ -1,6 +1,16 @@
 import json
+import warnings
 from websockets.sync.client import connect
-from websockets.client import connect as connect_async
+
+# Suppress deprecation warnings for legacy websockets API
+warnings.filterwarnings("ignore", category=DeprecationWarning, module="websockets")
+
+try:
+    from websockets.asyncio.client import connect as connect_async
+except ImportError:
+    # Fallback to legacy API for older websockets versions
+    from websockets.client import connect as connect_async
+
 from lighter.configuration import Configuration
 
 class WsClient:
